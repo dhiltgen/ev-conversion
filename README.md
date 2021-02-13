@@ -14,11 +14,13 @@ conversions for my collection of project cars.  My goal is to get my conversion
 strategy "dialed in" with a first conversion, and replicate that across the
 others.  Hopefully these notes will help others consdering similar projects.
 
+![Getting Started](./images/getting_started.jpg)
+
 # Current Status
 
 As of Feb 2021:
 
-* First vehicle: '85 Toyota 4Runner
+* First vehicle to convert: '85 Toyota 4Runner (the 5.0 V8 was over the hill)
 * All the major systems have been acquired (see below for details)
 * Replacement Logic boards have been installed and powered on
 * Bench testing has been performed on BMS + battery pack
@@ -36,9 +38,21 @@ happy with ~100 miles.)
 
 Purchasing "new" high performance electrc motors is still very costly.  **Tesla
 Large Drive Units** from S/X cars are plentiful at wrecking yards, and are
-quite reasonably priced (~$2K) for what they are capable of.  Depending on the
+quite reasonably priced (~$2-3K) for what they are capable of.  Depending on the
 battery pack, and current/voltage delivery, I anticipate over 400 hp and 400 ft
-lb, which is a significant bump from the existing motors in my project cars.
+lb, which is a significant bump from the existing engines in my project cars.
+
+My plan is to skip a transmission or transfer case, and instead install the
+motor roughly where the t-case was before.  This should help reduce weight, and
+leave more room in the engine compartment for batteries and other components.
+To achieve proper gear ratios for drivability, this will involve swapping out
+the stock gear set in LDU with an aftermarket [reduced ratio geat
+set](https://zero-ev.co.uk/product/tesla-large-drive-unit-gear-set-4-51/) and a
+[limited slipp differential](https://zero-ev.co.uk/product/quaife-large-tesla-drive-unit-limited-slip-diff-lsd/).
+I may opt to change the gear ratios in the differentials to achieve > 70mph on
+the highway without over-revving the motor, but given this is more intended for
+around town and 4-wheeling, the higher ratio might be more desirable, so I'll
+wait until it's on the road to decide.
 
 To have complete control over the motor, I've opted for the
 [OpenInverter](https://openinverter.org/wiki/Main_Page)
@@ -51,16 +65,19 @@ solutions in this space, but I've opted for the open source path.
 Misc Notes:
 * Motor to the rear, axles in front of the unit, rotate away from the motor on top
 * Toyota 4Runner shafts: top rotates towards driver
-* Motor will be on the passenger side for normal rotation direction.  Might cause alignment challenges for front shaft
-* Might want the reverse direction pump setup
+* Motor would have to be on the passenger side for normal rotation direction.
+* Would cause alignment challenges for front shaft which is on the passenger side
+* Plan to reverse direction (requires [pump reversal kit](https://zero-ev.co.uk/product/tesla-large-drive-unit-replacement-reverse-drive-oil-pump/))
+* Controller Source: https://github.com/damienmaguire/Tesla-Drive-Unit
 
 LDU part numbers:
 * 2012-2016 1002633-00-F -- e.g. 2014 S 85
 * 2016-2020 1037000-00-F
 * ?? 1025276-00-Q
 
-Shafts: 36mm?  26 spline?
+Shafts: 36mm?  26 spline? (need to measure...)
 
+![Motor](./images/motor.jpg) ![Motor Controller Swapped](./images/motor_controller.jpg)
 
 ## Battery Pack
 
@@ -69,19 +86,30 @@ voltage/amperage needed for full performance out of the Tesla LDU, they are
 still quite expensive as they're in very high demand.  Based on my research,
 the Chevrolet Volt battery pack is quite popular as it's far less expensive
 (~2K), can deliver the voltage and amerage for the LDU, will take up less
-space, just with less overall range.  The 1st generation is the best suppotred
-by my chosen BMS option (see below.)
+space, just with less overall range (16.5 kwh vs. the Tesla up to 100 kwh.)
+The 1st generation is the best supported by my chosen BMS option (see below.)
+
+My original plan was to see if I could squeeze the full pack in the engine
+compartment and tranny tunnel, but it turned out to be a little too large and I
+didn't want to resort to heavy modifications of the body sheet metal.  My new
+plan is to split the pack into the 3 modules, and install the large module in
+the engine compartment/tunnel, small module where the factory gas tank was, and
+the medium module behind the rear axle (roughly where the factory spare tire
+would have been.)  I plan to include the contactors and other high-voltage
+junctions inside the front battery box, along with the factory "quick"
+disconnect from the Volt pack.
 
 Misc Notes:
 * Generation 1: 2011-2015
+* Purchased 2014 pack
 * Lg chem (LiMn2O4)
 * Roughly, 65" long, 37" wide, 15" tall in orginal pack
-* Has master/slave bms setup which works with simpbms
-* Apparently second generation (2016-2019) has single unit which isn't compatible, but might be able to swap over to the older slaves
+* Has primary+secondary bms setup which works with simpbms
+* Apparently second generation (2016-2019) has single unit which isn't compatible, but might be able to swap over to the older secondaries
 * Front unit has main contactors, pre-charge resistor, high voltage pack heater (in coolant connector)
-* TODO - experiment with this inline heater to see if it's powerful enough to be a cabin heater too
+* TODO - experiment with this inline heater to see if it's powerful enough to be a cabin heater
 * 2011-2012: 16.0 kwh, 435 lbs, 288 cells, 360v, nom, 96S 3P, 390v @ 87%SOC (~full) -- cell: 3.7v nom, 4.15 max, 3.0 min
-* 2013-2014: 16.5
+* 2013-2014: 16.5 kwh
 * 2015: 17.1
 * 2016(2nd gen): 18.4 kwh, 192 cells
 * 2013 battery test by gov says:
@@ -93,6 +121,10 @@ Misc Notes:
 * Anecdotally GM considers full as ~4.0v or ~390v
 * Max load - 350kw for ~10s
 
+General Li-ion battery notes:
+* Discharge range: -20c to 60c
+* Charge range: 10c to 30c for optimal life (0-45c with shorter life)
+
 Notes from forum posts on people reverse engineering the pack:
 * Sensor is lem product dhab s44 a 0 to 600 amp inductive coupled DC. Runs on 5 v ref.
 
@@ -101,6 +133,7 @@ Battery interface module:
 - One of the water connectors contains a HV heater (working from a pack voltage), again, controlled by one MOSFET
 - All precharge, heater and contactors can be controlled externally, not using BMS module (it does not interface to it at all). Using X1 and X2 external connectors
 
+![Battery Modules](./images/battery_modules.jpg)
 
 ## Battery Management System
 
@@ -119,16 +152,20 @@ Misc Notes:
 * Firmware: https://github.com/tomdebree/AmperaBattery/blob/master/VoltBMSV2/VoltBMSV2.ino.TEENSY32.hex
 
 
-SimBMS hooked up to a raspberry pi
+To reduce the chance of something going wrong and frying my laptop, I've
+deployed a Raspberry PI in the garage which works fine for serial monitoring of
+the SimBMS and other USB based logic boards that show up as serial devices.
 
 ```
 screen /dev/ttyACM0 115200
 ```
 
+![Simp BMS](./images/simpbms.jpg)
+
 ## Charger
 
 I've opted to utilize a Tesla battery charger from the S/X model, as they're
-plentiful and reasonably priced (~$200), and leverage an
+plentiful and reasonably priced (~$350), and leverage an
 [EV BMW](https://www.evbmw.com/) open source
 [drop-in logic board](https://www.evbmw.com/index.php/evbmw-webshop/tesla-boards).
 I've chosen the 2nd generation as the logic board is less invasive.
@@ -142,16 +179,17 @@ Misc Notes:
 * 1014963-05-B DO NOT USE - supercharger variant, uses different CAN messages, doesn't work
 * 1014963-00-L Good
 * Should be about 25 amps of current max going into the battery 40 amp from the wall
+* TODO - bench test and take measurements
 * Recommendation is (3) 20 amp fuses for each leg of the DC output
+* Controller Source: https://github.com/damienmaguire/Tesla-Charger
 
-Notes from an oldr forum post:
+Notes from an older forum post (may not be accurage on all model numbers):
 * 1014963-05-B - Not working. DC scaling is off (3rd module acts differently from 1 and 2)
 * 1014963-00-E - Not working. DC scaling is off
 * 1014963-05-B - Not working. DC scaling is off. Accidentally burned out one of the modules with a wiring error
 * 1014963-00-L - Used to work. No scaling issues. Burned out during the same wiring error as above
 * 1014963-00-E - Working. No scaling issues
 * https://openinverter.org/forum/viewtopic.php?f=10&t=78&hilit=contactor&start=450#p11645
-
 
 
 Power Connector :
@@ -164,14 +202,16 @@ Signal connectors :
 * 19418-0026 - 12 way Molex MX150 connector header
 * 33012-2001 – MX150 14-16AWG crimp terminals
 
+![Charger](./images/charger.jpg)
 
 ## DC/DC
 
-Keeping the 12 volt system operational requires a 12V battery, and a means to
-keep it charged (no spinning alternators here.)  There are various DC to DC
-step-down options available.  I've opted for the Tesla DC/DC, as it's not too
-expensive, can be driven by CAN messages, but by default will output a
-reasonable voltage so it should be ~turn-key.
+Most of the systems require a 12 volt source, and keeping that 12v system
+operational requires a 12V battery, and a means to keep it charged (no spinning
+alternators here.)  There are various DC to DC step-down options available.
+I've opted for the Tesla DC/DC, as it's not too expensive (~$350), can
+optionally be driven by CAN messages, but by default will output a reasonable
+voltage so it should be ~turn-key and I can tune it later on if needed.
 
 Misc Notes:
 * Tesla: 1028665-00-B - AKA Delta Electronics DAP-2500AB A Rev 02
@@ -182,11 +222,13 @@ Misc Notes:
 
 
 Alternative considered:
-* Volt dcdc needs can messages to work-- ~$200
+* Volt dcdc needs can messages to work so it doesn't seem ideal -- ~$200
 * https://openinverter.org/forum/viewtopic.php?f=9&t=335&start=30#p5260
 * Pn: 24284603
 * (forum comment) I wired the DCDC before the contactors and used a 16amp breaker as suggested above. It now works fine and draws about 8amps of current when LV is applied.
   
+
+![DC/DC](./images/dcdc.jpg)
 
 ## Contactors
 
@@ -197,25 +239,37 @@ essential to make sure the system isn't energized all the time, and the various
 controllers can provide input to determine when to power on various components
 that draw from the main traction battery pack.
 
-I'll be "recycling" the 2 contactors from the Volt battery pack, as well as 
-* Panasonic contactors: AEV14012 M05 - 450 volt, 120 A load continuous, 225A (3 min), 400A (30s)
-* Gigavac ... TODO - details here...
+I'll be "recycling" the 2 contactors from the Volt battery pack, as well as picking up some additional ones
+* (From the Volt battery pack) Panasonic contactors: AEV14012 M05 - 450 volt, 120 A load continuous, 225A (3 min), 400A (30s)
+* TE Kilovac EV200AAANA
 
-# Misc
+I tried to desolder the high voltage low-current relays which were in the PCB
+from the Volt battery controller module, and they were being quite stubborn, so
+instead I'll source new contactors as needed.
+
+# Misc Parts
 
 GM Volt Battery Heater: 20996973 / 506305
 * Replaced by 24299406
 * Unknown amp load - will have to test...
+* Unknown if it's PWM or just binary on/off - will need to experiment
+* May be suitable as a pack heater or maybe a cabin heater?
 
 Tesla Battery Heater: 1038901-00-G
 * Probably 40amp fuse (not sure)
 * PWM controlled
 * DrJeff was working on it (posted some theories, but couldn’t find final answer - 5v 1khz...?)
+* May be suitable as a pack heater or maybe a cabin heater?
 
 Wire for traction: 2/0 good for 1000amps 
 * https://www.evwest.com/catalog/product_info.php?cPath=2_21&products_id=92&osCsid=utljnjejv70mgf8mgfief94gi2 
 
 Coolant pump 1K0965561J $35 on Amazon
+
+Not sure what soleniod valve(s) I'll use to divert the coolant loop(s) based on the
+various temperatures. Most likely I'll just keep it simple with a single loop to start, then
+get some mileage on it and evaluate temps of everything to determine a refined
+plumbing circuit.
 
 Vacuum pump for brakes
 * 8E0927317 $38 - needs vacuum sensor
@@ -233,6 +287,7 @@ Other possible options:
 * Durango/Grand Cherokee based on MBZ body - 2014+
 * 1988-91 Subaru XT6 - PWM works, but may not be super strong
 * Volvo: uses CAN signals to fine tune, but can be made to work in single speed w/o CAN messages
+* Given the 4Runner has oversized tires (33"), a stronger pump will be better...
 
 CAN bus
 * Shield plus arduino apparently tricky for beginners
