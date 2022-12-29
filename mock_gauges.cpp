@@ -1,9 +1,12 @@
 // Quick mock-up of a potential set of gauges
 // TODO - convert this to arduino TFT library with an abstraction layer to allow mock testing in X11
+//
+// g++ mock_gauges.cpp -g -I/usr/include/freetype2 -o mock_gauges -lX11 -lXft
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xos.h>
+#include <X11/Xft/Xft.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <cstdio>
@@ -41,9 +44,14 @@ typedef struct {
 void gauge(GaugeConfiguration cfg, int value) {
     // X11 specific aspects
     char fontQuery[255];
-    XFontStruct* valueFont;// TODO - these leak!
-    XFontStruct* labelFont;
-    XFontStruct* rangeFont; 
+    XftFont* valueFont;// TODO - these leak!
+    XftFont* labelFont;
+    XftFont* rangeFont; 
+    XGlyphInfo extents;
+    XftDraw *draw;
+    XftColor color;
+    Visual *visual;
+    Colormap cmap;
 
     char readingText[64];
     char labelText[64];
@@ -91,33 +99,41 @@ void gauge(GaugeConfiguration cfg, int value) {
     // X11 specfic heigh/width calculations based on fonts
     // Determine target text size for center value
     int targetValueFontHeight = width + width/2;
-    snprintf(fontQuery, 255, "-*-*-medium-r-s*--%d-*-*-*-*-*-iso10*-1",targetValueFontHeight);
-    valueFont = XLoadQueryFont(dis, fontQuery);
+    visual = DefaultVisual(dis, screen);
+    cmap = DefaultColormap(dis, screen);
+    snprintf(fontQuery, 255, "times:pixelsize=%d",targetValueFontHeight);
+    valueFont = XftFontOpenName(dis, screen, fontQuery);
     // Determine target text size for label
     int targetLabelFontHeight = width;
-    snprintf(fontQuery, 255, "-*-*-medium-r-s*--%d-*-*-*-*-*-iso10*-1",targetLabelFontHeight);
-    labelFont = XLoadQueryFont(dis, fontQuery);
+    snprintf(fontQuery, 255, "times:pixelsize=%d",targetLabelFontHeight);
+    labelFont = XftFontOpenName(dis, screen, fontQuery);
     // Determine target text size for range
     int targetRangeFontHeight = width * 0.8;
-    snprintf(fontQuery, 255, "-*-*-medium-r-s*--%d-*-*-*-*-*-iso10*-1",targetRangeFontHeight);
-    rangeFont = XLoadQueryFont(dis, fontQuery);
+    snprintf(fontQuery, 255, "times:pixelsize=%d",targetRangeFontHeight);
+    rangeFont = XftFontOpenName(dis, screen, fontQuery);
+    // TODO - move to init
+    XftColorAllocName(dis, visual, cmap, "#0000ee", &color);
+    draw = XftDrawCreate(dis, win, visual, cmap);
 
     // Determine text value
     snprintf(readingText, 64, "%d%c",value, cfg.unit);
-    int readingWidth = XTextWidth(valueFont, readingText, strlen(readingText));
-    int readingHeight = valueFont->ascent + valueFont->descent ;
+    XftTextExtents8(dis, valueFont, (const FcChar8*) readingText, strlen(readingText), &extents);
+    int readingWidth = extents.width;
+    int readingHeight = extents.height;
     int readingX = (x + size/2) - (readingWidth/2);
     int readingY = (y + size/2) + (readingHeight/2);
 
     // Determine text label
-    int labelWidth = XTextWidth(valueFont, cfg.label, strlen(cfg.label));
-    int labelHeight = labelFont->ascent + labelFont->descent ;
+    XftTextExtents8(dis, valueFont, (const FcChar8*) cfg.label, strlen(cfg.label), &extents);
+    int labelWidth = extents.width;
+    int labelHeight = extents.height;
     int labelX = (x + size/2) - (labelWidth/2);
     int labelY = (y + size - width) + (labelHeight/2);
 
     // Determine text range
-    int rangeWidth = XTextWidth(valueFont, rangeText[maxRange], strlen(rangeText[maxRange]));
-    int rangeHeight = rangeFont->ascent + rangeFont->descent ;
+    XftTextExtents8(dis, valueFont, (const FcChar8*) rangeText[maxRange], strlen(rangeText[maxRange]), &extents);
+    int rangeWidth = extents.width;
+    int rangeHeight = extents.height;
     rangeOrigin[0][0] = (x);
     rangeOrigin[0][1] = (y + size - width/2 + pad/2);
     rangeOrigin[1][0] = (x);
@@ -127,12 +143,12 @@ void gauge(GaugeConfiguration cfg, int value) {
     rangeOrigin[3][0] = (x + size - rangeWidth/2); // XXX width's don't quite seem rght
     rangeOrigin[3][1] = (y + size - width/2 + pad/2);
 
-    XSetForeground(dis,gc,fgColor);
-    XSetFont(dis,gc,rangeFont->fid);
-    XDrawString(dis,win,gc,rangeOrigin[0][0],rangeOrigin[0][1], rangeText[0], strlen(rangeText[0]));
-    XDrawString(dis,win,gc,rangeOrigin[1][0],rangeOrigin[1][1], rangeText[1], strlen(rangeText[1]));
-    XDrawString(dis,win,gc,rangeOrigin[2][0],rangeOrigin[2][1], rangeText[2], strlen(rangeText[2]));
-    XDrawString(dis,win,gc,rangeOrigin[3][0],rangeOrigin[3][1], rangeText[3], strlen(rangeText[3]));
+    //XSetForeground(dis,gc,fgColor);
+    //XSetFont(dis,gc,rangeFont->fid);
+    XftDrawStringUtf8(draw,&color,rangeFont,rangeOrigin[0][0],rangeOrigin[0][1], (const FcChar8*) rangeText[0], strlen(rangeText[0]));
+    XftDrawStringUtf8(draw,&color,rangeFont,rangeOrigin[1][0],rangeOrigin[1][1], (const FcChar8*) rangeText[1], strlen(rangeText[1]));
+    XftDrawStringUtf8(draw,&color,rangeFont,rangeOrigin[2][0],rangeOrigin[2][1], (const FcChar8*) rangeText[2], strlen(rangeText[2]));
+    XftDrawStringUtf8(draw,&color,rangeFont,rangeOrigin[3][0],rangeOrigin[3][1], (const FcChar8*) rangeText[3], strlen(rangeText[3]));
 
     // https://tronche.com/gui/x/xlib/graphics/drawing/XDrawArc.html
 
@@ -183,11 +199,11 @@ void gauge(GaugeConfiguration cfg, int value) {
     XFillArc(dis,win,gc,innerX,innerY,innerSize,innerSize,highWarnAngle,64);
 
     // Place text value in the center
-    XSetForeground(dis,gc,fgColor);
-    XSetFont(dis,gc,valueFont->fid);
-    XDrawString(dis,win,gc,readingX,readingY, readingText, strlen(readingText));
-    XSetFont(dis,gc,labelFont->fid);
-    XDrawString(dis,win,gc,labelX,labelY, cfg.label, strlen(cfg.label));
+    //XSetForeground(dis,gc,fgColor);
+    //XSetFont(dis,gc,valueFont->fid);
+    XftDrawStringUtf8(draw,&color,valueFont,readingX,readingY, (const FcChar8*) readingText, strlen(readingText));
+    //XSetFont(dis,gc,labelFont->fid);
+    XftDrawStringUtf8(draw,&color,labelFont,labelX,labelY, (const FcChar8*) cfg.label, strlen(cfg.label));
 
 }
 

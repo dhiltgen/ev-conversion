@@ -18,13 +18,17 @@ others.  Hopefully these notes will help others consdering similar projects.
 
 # Current Status
 
-As of Feb 2021:
+As of Dec 2022:
 
 * First vehicle to convert: '85 Toyota 4Runner (the 5.0 V8 was over the hill)
 * All the major systems have been acquired (see below for details)
 * Replacement Logic boards have been installed and powered on
-* Bench testing has been performed on BMS + battery pack
-* Battery boxes are under construction
+* LDU is mounted where the transfercase used to be
+* Battery boxes are fully fabricated
+* BMS tested with full pack 
+* HV wiring is completed
+* Low voltage control circuits being built
+
 
 # Major Systems
 
@@ -76,6 +80,17 @@ LDU part numbers:
 * ?? 1025276-00-Q
 
 Shafts: 36mm?  26 spline? (need to measure...)
+
+Porsche 930 stump
+Cv joints:
+28 spline
+30.6mm shaft (some list as 30mm)
+Cages are weak Link - 4130 cages are stronger
+Axles: 300M
+108mm outer cv - 40mm thick
+Normal joint can do 22 degree, high angle versions up to 35 degrees
+Boot must match shaft diameter
+
 
 ![Motor](./images/motor.jpg) ![Motor Controller Swapped](./images/motor_controller.jpg)
 
@@ -134,6 +149,8 @@ Battery interface module:
 - All precharge, heater and contactors can be controlled externally, not using BMS module (it does not interface to it at all). Using X1 and X2 external connectors
 
 ![Battery Modules](./images/battery_modules.jpg)
+![Battery Box Wiring](./images/batt_box_wiring.jpg)
+![Battery Box Wiring](./images/batt_box_wiring2.jpg)
 
 ## Battery Management System
 
@@ -246,6 +263,64 @@ I'll be "recycling" the 2 contactors from the Volt battery pack, as well as pick
 I tried to desolder the high voltage low-current relays which were in the PCB
 from the Volt battery controller module, and they were being quite stubborn, so
 instead I'll source new contactors as needed.
+
+# Gauges
+
+The original gauge cluster in my truck uses a mechanical speedo, and has
+limited gauges.  For the 5.0 conversion, I had resorted to a row of AutoMeter
+gauges bolted onto the dash, which wasn't ideal but worked for that setup.  At
+this point, for an EV conversion it makes sense to just take the plunge and
+build a custom cluster.  I'm planning to hook up an Arduino with to the CAN bus
+coming from the major systems (LDU, SimpBMS, Charger, DC/DC) and use that to
+instrument the system.
+
+Instrument cluster dimensions
+* 5.5 tall 
+* 15 wide 
+* 2-3 deep
+* https://www.buydisplay.com/arduino-display
+* Controllers: 
+* RA8875 - adafruit library
+* SSD1963
+* 8” Tft display should be optimal size
+
+* UNO/Due/Mega 2560
+* Uno - 5v, can handle 12-20v input power
+* Mega - 5v, same voltage, more pins
+* Due is 32bit and 3.3v
+* EEPROM only good for 100k writes per location, with 512 bytes total. Rotate lowest byte through multiple locations to spread the writes out
+
+
+Cluster ideas:
+* Dc/dc: https://openinverter.org/wiki/Tesla_Model_S/X_DC/DC_Converter 
+* Input power watts
+* Output amps
+* Output voltage
+* Coolant temp
+
+LDU: hidden when charging
+* On/off
+* Fwd/rev
+* Inverter and motor temp
+* Dc amps, ac amps
+* Pack voltage
+* Rpm - mph
+
+Bms:
+* Status
+* Charging
+* Balancing
+* Heating 
+* Pack temp min/max/ave 
+* Cell voltage min/max/ave
+* Pack voltage
+* Amps 
+
+Charger: hidden when driving
+* Status
+* Amps
+* Ac voltage
+* Evse status
 
 # Misc Parts
 
