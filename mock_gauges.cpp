@@ -10,130 +10,349 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <cstdio>
+#include <math.h>
 
 Display *dis;
 int screen;
 Window win;
 GC gc;
 unsigned long fgColor,bgColor;
-XColor yellow,red, blue;
+XColor yellow,red, blue, darkGrey;
 
 typedef struct {
-    // Placement
     int x;
     int y;
     unsigned int size;
 
     // Ranges - set div large enough to retain accuracy with integer math
     int div; // Divide all values by this to get real unit value 
-    // TODO - div not yet implemented...
     int minValue;
     int maxValue;
     int lowWarn;
     int highWarn;
 
+    // TODO refactor warnings to be a list, possibly with callback function when crossed
     unsigned long lowWarnColor;
     unsigned long highWarnColor;
+    unsigned long tickColor;
 
     // Unit character for numeric display
     char unit;
 
-    char label[16]; // TODO dynamic string of some sorts?
+    const char *label;
 } GaugeConfiguration;
 
-void gauge(GaugeConfiguration cfg, int value) {
-    // X11 specific aspects
-    char fontQuery[255];
-    XftFont* valueFont;// TODO - these leak!
-    XftFont* labelFont;
-    XftFont* rangeFont; 
-    XGlyphInfo extents;
-    XftDraw *draw;
-    XftColor color;
-    Visual *visual;
-    Colormap cmap;
+class Line {
+public:
+    int x1;
+    int y1;
+    int x2;
+    int y2;
+    unsigned long color;
+    int value;
+    Line(
+        int x1,
+        int y1,
+        int x2,
+        int y2,
+        unsigned long color,
+        int value);
 
+    virtual void Draw() = 0;
+};
+
+Line::Line(
+        int x1,
+        int y1,
+        int x2,
+        int y2,
+        unsigned long color,
+        int value){
+    this->x1 = x1;
+    this->y1 = y1;
+    this->x2 = x2;
+    this->y2 = y2;
+    this->color = color;
+    this->value = value;
+}
+
+class XLine: public Line {
+public:
+    XLine(
+        int x1,
+        int y1,
+        int x2,
+        int y2,
+        unsigned long color,
+        int value) : Line(x1,y1,x2,y2,color,value){}
+    virtual void Draw();
+};
+
+
+void XLine::Draw() {
+    XSetForeground(dis,gc,color);
+    XDrawLine(dis, win, gc, x1,y1,x2,y2);
+}
+
+
+class BaseGauge {
+public:
+    BaseGauge(GaugeConfiguration cfg);
+    void UpdateValue(int value);
+    virtual void Draw() = 0;
+    virtual Line* MakeLine(
+        int x1,
+        int y1,
+        int x2,
+        int y2,
+        unsigned long color,
+        int value) = 0;
+    GaugeConfiguration cfg; // TODO - should be protected
+
+protected:
+    void init(); // Wrap up initialization
+    int x; // Actual X after padding
+    int y; // Actual Y after padding
+    unsigned int size; // Actual size after padding
+    int value;
+    int width;
+    int pad;
     char readingText[64];
     char labelText[64];
     char rangeText[4][8];
     int rangeOrigin[4][2];
-    int startAngle = 225*64; // Angles defined by X11 lib
-    int endAngle = -270*64; // Angles defined by X11 lib
-    int width = cfg.size / 8;
-    int pad = width / 4;
-    int x = cfg.x + pad;
-    int y = cfg.y + pad;
-    unsigned int size = cfg.size - (2*pad);
-    int innerX = x + width;
-    int innerY = y + width;
-    unsigned int innerSize = size - (2*width);
+    int startAngle = 225*64; // TODO - fixup the X11 specific code to do the *64 math
+    int endAngle = -270*64; 
+    int innerX;
+    int innerY;
+    unsigned int innerSize;
+    int innerRadius;
+    int outerRadius;
+    int innerRadiusWarn;
+    int outerRadiusWarn;
+    int innerRadiusTick;
+    int outerRadiusTick;
+    int range; // Range of values for visual display on gauge
+    int lowWarnAngle;
+    int highWarnAngle;
+    int currentAngle;
+    int maxRange;
 
-    // Range of values for visual display on gauge
-    int range = cfg.maxValue - cfg.minValue;
+    Line *capLine;
+    Line *lowWarnLine;
+    Line *highWarnLine;
+    Line **ticks;
+    unsigned int tickCount;
+};
+
+BaseGauge::BaseGauge(GaugeConfiguration cfg) {
+    printf("In BaseGauge default ctor %s\n", cfg.label);
+    if (cfg.div == 0) {
+        cfg.div = 1;
+    }
+    capLine = nullptr;
+    lowWarnLine = nullptr;
+    highWarnLine = nullptr;
+    this->cfg = cfg;
+    width = cfg.size / 8;
+    pad = this->width / 4;
+    x = cfg.x + this->pad;
+    y = cfg.y + this->pad;
+    size = cfg.size - (2*this->pad);
+    innerX = x + this->width;
+    innerY = y + this->width;
+    innerSize = size - (2*width);
+    innerRadius = size/2-width;
+    outerRadius = size/2;
+    innerRadiusWarn = size/2-width-width/4; // Slightly larger marking
+    outerRadiusWarn = size/2+width/4; // Slightly larger marking
+    innerRadiusTick = size/2-width/2;
+    outerRadiusTick = size/2;
+
+    this->range = cfg.maxValue - cfg.minValue;
 
     // Warnings to angle mappings
-    int lowWarnAngle = startAngle + endAngle * (cfg.lowWarn-cfg.minValue) / range;
-    int highWarnAngle = startAngle + endAngle * (cfg.highWarn-cfg.minValue) / range;
+    lowWarnAngle = startAngle + endAngle * (cfg.lowWarn-cfg.minValue) / range;
+    highWarnAngle = startAngle + endAngle * (cfg.highWarn-cfg.minValue) / range;
 
     // Range Text
     // TODO - some algo to find closest round size
-    snprintf(rangeText[0], 8, "%d",cfg.minValue);
-    snprintf(rangeText[1], 8, "%d",cfg.minValue + range/3);
-    snprintf(rangeText[2], 8, "%d",cfg.minValue + range*2/3);
-    snprintf(rangeText[3], 8, "%d",cfg.maxValue);
-    int maxRange = 0;
+    snprintf(rangeText[0], 8, "%d",cfg.minValue/cfg.div);
+    snprintf(rangeText[1], 8, "%d",cfg.minValue/cfg.div + range/3/cfg.div);
+    snprintf(rangeText[2], 8, "%d",cfg.minValue/cfg.div + range*2/3/cfg.div);
+    snprintf(rangeText[3], 8, "%d",cfg.maxValue/cfg.div);
+    maxRange = 0;
     for (int i = 1; i < 4; i++) {
         if (strlen(rangeText[i]) > strlen(rangeText[maxRange])) {
             maxRange = i;
         }
     }
+}
 
+void BaseGauge::init() {
+    // Precalculate the cartesian cords for the various overlay lines
+    // to save on cpu cycles when updating
+    double endRadians = M_PI/180.0 * (startAngle+endAngle)/64;
+    capLine = MakeLine(
+        x + size/2 + (int)(innerRadius * cos(endRadians)),
+        y + size/2 - (int)(innerRadius * sin(endRadians)),
+        x + size/2 + (int)(outerRadius * cos(endRadians)),
+        y + size/2 - (int)(outerRadius * sin(endRadians)),
+        fgColor,
+        cfg.maxValue
+    );
+    if (cfg.lowWarn != cfg.minValue) {
+        double lowWarnRadians = M_PI/180.0 * lowWarnAngle/64;
+        lowWarnLine = MakeLine(
+            x + size/2 + (int)(innerRadiusWarn * cos(lowWarnRadians)),
+            y + size/2 - (int)(innerRadiusWarn * sin(lowWarnRadians)),
+            x + size/2 + (int)(outerRadiusWarn * cos(lowWarnRadians)),
+            y + size/2 - (int)(outerRadiusWarn * sin(lowWarnRadians)),
+            cfg.lowWarnColor,
+            cfg.lowWarn
+        );
+    }
+    if (cfg.highWarn != cfg.maxValue) {
+        double highWarnRadians = M_PI/180.0 * highWarnAngle/64;
+        highWarnLine = MakeLine(
+            x + size/2 + (int)(innerRadiusWarn * cos(highWarnRadians)),
+            y + size/2 - (int)(innerRadiusWarn * sin(highWarnRadians)),
+            x + size/2 + (int)(outerRadiusWarn * cos(highWarnRadians)),
+            y + size/2 - (int)(outerRadiusWarn * sin(highWarnRadians)),
+            cfg.highWarnColor,
+            cfg.highWarn
+        );
+    }
+
+    // Tick marks
+    // TODO - is there a more clever way to break down the tick spacing?
+    int tickSpacing = 0;
+    if (range-2 <= 10) {
+        tickSpacing = 1;
+    } else if (range-2 <= 100) {
+        tickSpacing = 10;
+    } else if (range-2 <= 1000) {
+        tickSpacing = 100;
+    } else {
+        tickSpacing = 1000;
+    }
+    tickCount = (range-2) / tickSpacing;
+    printf("Ticks: %d %d\n", tickCount, tickSpacing);
+    ticks = new Line*[tickCount];
+    for (int i = 0; i < tickCount; i++) {
+        int val = cfg.minValue + (i+1) * tickSpacing;
+        int tickAngle = startAngle + endAngle * (val-cfg.minValue)/range;
+        printf("Tick %d = %d @ %d\n", i, val, tickAngle/64);
+        double tickRadians = M_PI/180.0 * tickAngle/64;
+        ticks[i] = MakeLine(
+            x + size/2 + (int)(innerRadiusTick * cos(tickRadians)),
+            y + size/2 - (int)(innerRadiusTick * sin(tickRadians)),
+            x + size/2 + (int)(outerRadiusTick * cos(tickRadians)),
+            y + size/2 - (int)(outerRadiusTick * sin(tickRadians)),
+            cfg.tickColor,
+            val
+        );
+    }
+}
+
+void BaseGauge::UpdateValue(int value) {
+    printf("%s new value %d\n", cfg.label, value);
+    this->value = value;
+    if (cfg.div == 10) {
+        snprintf(readingText, 64, "%d.%d%c",value/cfg.div,value%10, cfg.unit);
+    } else {
+        snprintf(readingText, 64, "%d%c",value/cfg.div, cfg.unit);
+    }
     // Determine angle of current reading relative to start
-    int currentAngle = 32; // Render at least 1/2 degree
+    currentAngle = 32; // Render at least 1/2 degree
     if (value > cfg.maxValue) {
         currentAngle = endAngle;
     } else if (value > cfg.minValue) {
         currentAngle = endAngle * (value-cfg.minValue)/range;
     }
 
-    // X11 specfic heigh/width calculations based on fonts
-    // Determine target text size for center value
-    int targetValueFontHeight = width + width/2;
-    visual = DefaultVisual(dis, screen);
-    cmap = DefaultColormap(dis, screen);
-    snprintf(fontQuery, 255, "times:pixelsize=%d",targetValueFontHeight);
-    valueFont = XftFontOpenName(dis, screen, fontQuery);
-    // Determine target text size for label
-    int targetLabelFontHeight = width;
-    snprintf(fontQuery, 255, "times:pixelsize=%d",targetLabelFontHeight);
-    labelFont = XftFontOpenName(dis, screen, fontQuery);
-    // Determine target text size for range
-    int targetRangeFontHeight = width * 0.8;
-    snprintf(fontQuery, 255, "times:pixelsize=%d",targetRangeFontHeight);
-    rangeFont = XftFontOpenName(dis, screen, fontQuery);
-    // TODO - move to init
-    XftColorAllocName(dis, visual, cmap, "#0000ee", &color);
-    draw = XftDrawCreate(dis, win, visual, cmap);
+    // TODO - more to do here
+}
 
-    // Determine text value
-    snprintf(readingText, 64, "%d%c",value, cfg.unit);
+class XGauge: public BaseGauge {
+private:
+    XftFont* valueFont;// TODO - these leak!
+    XftFont* labelFont;
+    XftFont* rangeFont; 
+    XGlyphInfo extents;
+    XftDraw *draw;
+    XftColor textColor;
+    Visual *visual;
+    Colormap cmap;
+public:
+    XGauge(GaugeConfiguration cfg);
+    virtual void Draw();
+    virtual Line* MakeLine(
+        int x1,
+        int y1,
+        int x2,
+        int y2,
+        unsigned long color,
+        int value) {return new XLine(x1,y1,x2,y2,color,value);}
+
+protected:
+    int readingWidth;
+    int readingHeight;
+    int readingX;
+    int readingY;
+    int labelWidth;
+    int labelHeight;
+    int labelX;
+    int labelY;
+    int rangeWidth;
+    int rangeHeight;
+};
+
+XGauge::XGauge(GaugeConfiguration cfg) : BaseGauge(cfg){
+    printf("In XGauge default ctor %s\n", cfg.label);
+    init();
+    // X11 specfic heigh/width calculations based on fonts
+    char fontQuery[64];
+    // Determine target text size for center value
+    int targetValueFontHeight = this->width + this->width/2;
+    this->visual = DefaultVisual(dis, screen);
+    this->cmap = DefaultColormap(dis, screen);
+    snprintf(fontQuery, 64, "times:pixelsize=%d",targetValueFontHeight);
+    this->valueFont = XftFontOpenName(dis, screen, fontQuery);
+    // Determine target text size for label
+    int targetLabelFontHeight = this->width;
+    snprintf(fontQuery, 64, "times:pixelsize=%d",targetLabelFontHeight);
+    this->labelFont = XftFontOpenName(dis, screen, fontQuery);
+    // Determine target text size for range
+    int targetRangeFontHeight = this->width * 0.8;
+    snprintf(fontQuery, 64, "times:pixelsize=%d",targetRangeFontHeight);
+    this->rangeFont = XftFontOpenName(dis, screen, fontQuery);
+    XftColorAllocName(dis, visual, cmap, "#0000ee", &textColor);
+    this->draw = XftDrawCreate(dis, win, this->visual, this->cmap);
+
+    // Determine text value using max value 
+    if (cfg.div == 10) {
+    snprintf(readingText, 64, "%d.0%c",this->cfg.maxValue/this->cfg.div, this->cfg.unit);
+    } else {
+    snprintf(readingText, 64, "%d%c",this->cfg.maxValue/this->cfg.div, this->cfg.unit);
+    }
     XftTextExtents8(dis, valueFont, (const FcChar8*) readingText, strlen(readingText), &extents);
-    int readingWidth = extents.width;
-    int readingHeight = extents.height;
-    int readingX = (x + size/2) - (readingWidth/2);
-    int readingY = (y + size/2) + (readingHeight/2);
+    readingWidth = extents.width;
+    readingHeight = extents.height;
+    readingX = (x + size/2) - (readingWidth/2);
+    readingY = (y + size/2) + (readingHeight/2);
 
     // Determine text label
-    XftTextExtents8(dis, valueFont, (const FcChar8*) cfg.label, strlen(cfg.label), &extents);
-    int labelWidth = extents.width;
-    int labelHeight = extents.height;
-    int labelX = (x + size/2) - (labelWidth/2);
-    int labelY = (y + size - width) + (labelHeight/2);
+    XftTextExtents8(dis, valueFont, (const FcChar8*) this->cfg.label, strlen(this->cfg.label), &extents);
+    labelWidth = extents.width;
+    labelHeight = extents.height;
+    labelX = (x + size/2) - (labelWidth/2);
+    labelY = (y + size - width) + (labelHeight/2);
 
     // Determine text range
     XftTextExtents8(dis, valueFont, (const FcChar8*) rangeText[maxRange], strlen(rangeText[maxRange]), &extents);
-    int rangeWidth = extents.width;
-    int rangeHeight = extents.height;
+    rangeWidth = extents.width;
+    rangeHeight = extents.height;
     rangeOrigin[0][0] = (x);
     rangeOrigin[0][1] = (y + size - width/2 + pad/2);
     rangeOrigin[1][0] = (x);
@@ -142,13 +361,15 @@ void gauge(GaugeConfiguration cfg, int value) {
     rangeOrigin[2][1] = (y + width/2);
     rangeOrigin[3][0] = (x + size - rangeWidth/2); // XXX width's don't quite seem rght
     rangeOrigin[3][1] = (y + size - width/2 + pad/2);
+}
 
+void XGauge::Draw() {
     //XSetForeground(dis,gc,fgColor);
     //XSetFont(dis,gc,rangeFont->fid);
-    XftDrawStringUtf8(draw,&color,rangeFont,rangeOrigin[0][0],rangeOrigin[0][1], (const FcChar8*) rangeText[0], strlen(rangeText[0]));
-    XftDrawStringUtf8(draw,&color,rangeFont,rangeOrigin[1][0],rangeOrigin[1][1], (const FcChar8*) rangeText[1], strlen(rangeText[1]));
-    XftDrawStringUtf8(draw,&color,rangeFont,rangeOrigin[2][0],rangeOrigin[2][1], (const FcChar8*) rangeText[2], strlen(rangeText[2]));
-    XftDrawStringUtf8(draw,&color,rangeFont,rangeOrigin[3][0],rangeOrigin[3][1], (const FcChar8*) rangeText[3], strlen(rangeText[3]));
+    XftDrawStringUtf8(draw,&textColor,rangeFont,rangeOrigin[0][0],rangeOrigin[0][1], (const FcChar8*) rangeText[0], strlen(rangeText[0]));
+    XftDrawStringUtf8(draw,&textColor,rangeFont,rangeOrigin[1][0],rangeOrigin[1][1], (const FcChar8*) rangeText[1], strlen(rangeText[1]));
+    XftDrawStringUtf8(draw,&textColor,rangeFont,rangeOrigin[2][0],rangeOrigin[2][1], (const FcChar8*) rangeText[2], strlen(rangeText[2]));
+    XftDrawStringUtf8(draw,&textColor,rangeFont,rangeOrigin[3][0],rangeOrigin[3][1], (const FcChar8*) rangeText[3], strlen(rangeText[3]));
 
     // https://tronche.com/gui/x/xlib/graphics/drawing/XDrawArc.html
 
@@ -163,8 +384,8 @@ void gauge(GaugeConfiguration cfg, int value) {
     XSetForeground(dis,gc,bgColor);
     XFillRectangle(dis,win,gc,readingX,readingY-readingHeight,readingWidth,readingHeight);
 
-    // Draw the outline for the gauge
-    // TODO - consider a shading band
+
+    // Draw current reading
     if (value < cfg.lowWarn && cfg.lowWarn != cfg.minValue) {
         XSetForeground(dis,gc,cfg.lowWarnColor);
     } else if (value > cfg.highWarn && cfg.highWarn != cfg.maxValue) {
@@ -172,43 +393,47 @@ void gauge(GaugeConfiguration cfg, int value) {
     } else {
         XSetForeground(dis,gc,fgColor);
     }
-    XDrawArc(dis,win,gc,x,y,size,size,startAngle,endAngle);
-    XDrawArc(dis,win,gc,innerX,innerY,innerSize,innerSize,startAngle,endAngle);
     XFillArc(dis,win,gc,x,y,size,size,startAngle,currentAngle);
     XSetForeground(dis,gc,bgColor);
     XFillArc(dis,win,gc,innerX,innerY,innerSize,innerSize,startAngle,currentAngle);
 
+    // Draw the outline for the gauge
+    XSetForeground(dis,gc,cfg.tickColor);
+    XDrawArc(dis,win,gc,x,y,size,size,startAngle,endAngle);
+    XDrawArc(dis,win,gc,innerX,innerY,innerSize,innerSize,startAngle,endAngle);
+
     // Cap the gauge
-    XSetForeground(dis,gc,fgColor);
-    XFillArc(dis,win,gc,x,y,size,size,startAngle+endAngle,32);
-    XSetForeground(dis,gc,bgColor);
-    XFillArc(dis,win,gc,innerX,innerY,innerSize,innerSize,startAngle+endAngle,32);
+    capLine->Draw();
 
     // Warning marks
-    // TODO - possibly consider converting to a line instead of narrow arc
-    if (cfg.lowWarn != cfg.minValue) {
-        XSetForeground(dis,gc,cfg.lowWarnColor);
-        XFillArc(dis,win,gc,x,y,size,size,lowWarnAngle,64);
+    if (lowWarnLine) {
+        lowWarnLine->Draw();
     } 
-    if (cfg.highWarn != cfg.maxValue) {
-        XSetForeground(dis,gc,cfg.highWarnColor);
-        XFillArc(dis,win,gc,x,y,size,size,highWarnAngle,64);
+    if (highWarnLine) {
+        highWarnLine->Draw();
     }
-    XSetForeground(dis,gc,bgColor);
-    XFillArc(dis,win,gc,innerX,innerY,innerSize,innerSize,lowWarnAngle,64);
-    XFillArc(dis,win,gc,innerX,innerY,innerSize,innerSize,highWarnAngle,64);
+
+    // Tick marks
+    for (int i = 0; i < tickCount; i++) {
+        ticks[i]->Draw();
+    }
+
+    //XSetForeground(dis,gc,bgColor);
+    //XFillArc(dis,win,gc,innerX,innerY,innerSize,innerSize,lowWarnAngle,64);
+    //XFillArc(dis,win,gc,innerX,innerY,innerSize,innerSize,highWarnAngle,64);
 
     // Place text value in the center
     //XSetForeground(dis,gc,fgColor);
     //XSetFont(dis,gc,valueFont->fid);
-    XftDrawStringUtf8(draw,&color,valueFont,readingX,readingY, (const FcChar8*) readingText, strlen(readingText));
+    XftDrawStringUtf8(draw,&textColor,valueFont,readingX,readingY, (const FcChar8*) readingText, strlen(readingText));
     //XSetFont(dis,gc,labelFont->fid);
-    XftDrawStringUtf8(draw,&color,labelFont,labelX,labelY, (const FcChar8*) cfg.label, strlen(cfg.label));
+    XftDrawStringUtf8(draw,&textColor,labelFont,labelX,labelY, (const FcChar8*) cfg.label, strlen(cfg.label));
 
+    XFlush(dis);
 }
 
 void init_x() {
-        printf("Starting\n");
+        //printf("Starting\n");
 
 	dis=XOpenDisplay((char *)0);
    	screen=DefaultScreen(dis);
@@ -217,7 +442,7 @@ void init_x() {
    	win=XCreateSimpleWindow(dis,DefaultRootWindow(dis),0,0,	
 		800, 600, 5,fgColor, bgColor);
 	XSetStandardProperties(dis,win,"Howdy","Hi",None,NULL,0,NULL);
-	XSelectInput(dis, win, ExposureMask|ButtonPressMask|KeyPressMask);
+	XSelectInput(dis, win, ExposureMask|ButtonPressMask);
         gc=XCreateGC(dis, win, 0,0);        
 	XSetBackground(dis,gc,bgColor);
 	XSetForeground(dis,gc,fgColor);
@@ -229,7 +454,9 @@ void init_x() {
         XAllocColor(dis, DefaultColormap(dis,screen),&red);
         XParseColor(dis, DefaultColormap(dis,screen), "blue", &blue);
         XAllocColor(dis, DefaultColormap(dis,screen),&blue);
-        printf("finished\n");
+        XParseColor(dis, DefaultColormap(dis,screen), "dark grey", &darkGrey);
+        XAllocColor(dis, DefaultColormap(dis,screen),&darkGrey);
+        //printf("finished\n");
 };
 
 void close_x() {
@@ -240,6 +467,7 @@ void close_x() {
 	XFreeGC(dis, gc);
 	XDestroyWindow(dis,win);
 	XCloseDisplay(dis);	
+// TODO - other leaks addressed here..
         printf("bye\n");
 	exit(1);				
 }
@@ -256,8 +484,7 @@ int main() {
         init_x();
 
 	XClearWindow(dis, win);
-        //gauge();
-        GaugeConfiguration battTemp = GaugeConfiguration{
+        XGauge battTemp = XGauge(GaugeConfiguration{
             x:5,
             y:5,
             size:180,
@@ -267,11 +494,12 @@ int main() {
             highWarn:70,
             lowWarnColor:blue.pixel,
             highWarnColor:red.pixel,
+            tickColor:darkGrey.pixel,
             unit:'c',
-            label: {'t','e', 'm','p',0}
-        };
+            label: "temp",
+        });
 
-        GaugeConfiguration soc = GaugeConfiguration{
+        XGauge soc = XGauge(GaugeConfiguration{
             x:190,
             y:5,
             size:180,
@@ -281,11 +509,12 @@ int main() {
             highWarn:95,
             lowWarnColor:red.pixel,
             highWarnColor:yellow.pixel,
+            tickColor:darkGrey.pixel,
             unit:'%',
-            label: {'S','O','C',0}
-        };
+            label: "SOC",
+        });
 
-        GaugeConfiguration motor = GaugeConfiguration{
+        XGauge motor = XGauge(GaugeConfiguration{
             x:5,
             y:190,
             size:180,
@@ -295,10 +524,11 @@ int main() {
             highWarn:60,
             lowWarnColor:blue.pixel,
             highWarnColor:red.pixel,
+            tickColor:darkGrey.pixel,
             unit:'c',
-            label: {'m','o','t','o','r', 0}
-        };
-        GaugeConfiguration inverter = GaugeConfiguration{
+            label: "motor",
+        });
+        XGauge inverter = XGauge(GaugeConfiguration{
             x:190,
             y:190,
             size:180,
@@ -308,11 +538,12 @@ int main() {
             highWarn:60,
             lowWarnColor:blue.pixel,
             highWarnColor:red.pixel,
+            tickColor:darkGrey.pixel,
             unit:'c',
-            label: {'i','n','v','e','r','t','e','r', 0}
-        };
+            label: "inverter",
+        });
 
-        GaugeConfiguration dcwatts = GaugeConfiguration{
+        XGauge dcwatts = XGauge(GaugeConfiguration{
             x:5,
             y:380,
             size:145,
@@ -322,10 +553,11 @@ int main() {
             highWarn:800,
             lowWarnColor:yellow.pixel,
             highWarnColor:red.pixel,
+            tickColor:darkGrey.pixel,
             unit:'w',
-            label: {'D','C',' ','w','a', 't', 't', 's', 0}
-        };
-        GaugeConfiguration dcamps = GaugeConfiguration{
+            label: "DC Watts",
+        });
+        XGauge dcamps = XGauge(GaugeConfiguration{
             x:150,
             y:380,
             size:145,
@@ -335,23 +567,26 @@ int main() {
             highWarn:80,
             lowWarnColor:yellow.pixel,
             highWarnColor:red.pixel,
+            tickColor:darkGrey.pixel,
             unit:'a',
-            label: {'D','C',' ','a','m', 'p', 's', 0}
-        };
-        GaugeConfiguration lowvolts = GaugeConfiguration{
+            label: "DC Amps",
+        });
+        XGauge lowvolts = XGauge(GaugeConfiguration{
             x:300,
             y:380,
             size:145,
-            minValue:9,
-            maxValue:16,
-            lowWarn:10,
-            highWarn:15,
+            div:10,
+            minValue:90,
+            maxValue:160,
+            lowWarn:100,
+            highWarn:150,
             lowWarnColor:yellow.pixel,
             highWarnColor:red.pixel,
+            tickColor:darkGrey.pixel,
             unit:'v',
-            label: {'1','2','v', 0}
-        };
-        GaugeConfiguration speed = GaugeConfiguration{
+            label: "12v",
+        });
+        XGauge speed = XGauge(GaugeConfiguration{
             x:390,
             y:5,
             size:370,
@@ -361,19 +596,20 @@ int main() {
             highWarn:100,
             lowWarnColor:yellow.pixel,
             highWarnColor:yellow.pixel,
-            unit:'m',
-            label: {'M','P','H', 0}
-        };
+            tickColor:darkGrey.pixel,
+            unit:'\0',
+            label: "MPH",
+        });
 
-        GaugeConfiguration gauges[] = {
-            battTemp,
-            soc,
-            motor,
-            inverter,
-            dcwatts,
-            dcamps,
-            lowvolts,
-            speed,
+        XGauge *gauges[] = {
+            &battTemp,
+            &soc,
+            &motor,
+            &inverter,
+            &dcwatts,
+            &dcamps,
+            &lowvolts,
+            &speed,
         };
 
 
@@ -388,6 +624,14 @@ int main() {
 		/* the window was exposed redraw it! */
                         printf("Redrawing\n");
 			redraw();
+                        for (float v = 0; v <= 1; v += 0.01) {
+                            for (int i = 0; i < sizeof(gauges)/sizeof(gauges[0]); i++) {
+                                gauges[i]->UpdateValue((int)(gauges[i]->cfg.maxValue-gauges[i]->cfg.minValue)*v + gauges[i]->cfg.minValue);
+                                gauges[i]->Draw();
+                            }
+	                    //redraw();
+                            usleep(50000);
+                        }
 		}
 		if (event.type==KeyPress&&
 		    XLookupString(&event.xkey,text,255,&key,0)==1) {
@@ -404,14 +648,12 @@ int main() {
 			int x=event.xbutton.x,
 			    y=event.xbutton.y;
 
-			strcpy(text,"X is FUN!");
-                        //int col = rand()%event.xbutton.x%255;
-			//XSetForeground(dis,gc,col);
-			//printf("You clicked %d,%d => %d\n",x, y, col);
-			//XDrawString(dis,win,gc,x,y, text, strlen(text));
-
+			//strcpy(text,"X is FUN!");
+                        double relative = y/600.0;
                         for (int i = 0; i < sizeof(gauges)/sizeof(gauges[0]); i++) {
-                            gauge(gauges[i], rand()%(gauges[i].maxValue-gauges[i].minValue) + gauges[i].minValue);
+                            int value = (int)(gauges[i]->cfg.maxValue-gauges[i]->cfg.minValue)*relative + gauges[i]->cfg.minValue;
+                            gauges[i]->UpdateValue(value);
+                            gauges[i]->Draw();
                         }
 
 		}
