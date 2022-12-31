@@ -62,6 +62,9 @@ protected:
     int value;
     int width;
     int pad;
+    int targetValueFontHeight;
+    int targetLabelFontHeight;
+    int targetRangeFontHeight;
     char readingText[64];
     char labelText[64];
     char rangeText[4][8];

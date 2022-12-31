@@ -1,7 +1,9 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <cstdio>
+#include <cstring>
 #include <math.h>
+#include "base_gauges.h"
 
 Line::Line(
         int x1,
@@ -16,6 +18,23 @@ Line::Line(
     this->y2 = y2;
     this->color = color;
     this->value = value;
+}
+
+int getFontTarget(int height) {
+    if (height <= 16) {
+        return 16;
+    } else if (height <= 24) {
+        return 24;
+    } else if (height <= 32) {
+        return 32;
+    } else if (height <= 24*2) {
+        return 24*2;
+    } else if (height <= 32*2) {
+        return 32*2;
+    } else if (height <= 24*3) {
+        return 24*3;
+    }
+    return 32*3;
 }
 
 BaseGauge::BaseGauge(GaugeConfiguration cfg) {
@@ -47,6 +66,10 @@ BaseGauge::BaseGauge(GaugeConfiguration cfg) {
     // Warnings to angle mappings
     lowWarnAngle = startAngle + endAngle * (cfg.lowWarn-cfg.minValue) / range;
     highWarnAngle = startAngle + endAngle * (cfg.highWarn-cfg.minValue) / range;
+
+    targetValueFontHeight = getFontTarget(width * 1.2);
+    targetLabelFontHeight = getFontTarget(width * 0.8);
+    targetRangeFontHeight = getFontTarget(width * 0.8);
 
 }
 
