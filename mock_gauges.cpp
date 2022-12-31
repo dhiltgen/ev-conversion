@@ -154,7 +154,7 @@ BaseGauge::BaseGauge(GaugeConfiguration cfg) {
     lowWarnLine = nullptr;
     highWarnLine = nullptr;
     this->cfg = cfg;
-    width = cfg.size / 8;
+    width = cfg.size / 7;
     pad = this->width / 4;
     x = cfg.x + this->pad;
     y = cfg.y + this->pad;
@@ -164,9 +164,9 @@ BaseGauge::BaseGauge(GaugeConfiguration cfg) {
     innerSize = size - (2*width);
     innerRadius = size/2-width;
     outerRadius = size/2;
-    innerRadiusWarn = size/2-width-width/4; // Slightly larger marking
-    outerRadiusWarn = size/2+width/4; // Slightly larger marking
-    innerRadiusTick = size/2-width/2;
+    innerRadiusWarn = size/2-width;
+    outerRadiusWarn = size/2;
+    innerRadiusTick = size/2-width/3;
     outerRadiusTick = size/2;
 
     this->range = cfg.maxValue - cfg.minValue;
@@ -175,18 +175,6 @@ BaseGauge::BaseGauge(GaugeConfiguration cfg) {
     lowWarnAngle = startAngle + endAngle * (cfg.lowWarn-cfg.minValue) / range;
     highWarnAngle = startAngle + endAngle * (cfg.highWarn-cfg.minValue) / range;
 
-    // Range Text
-    // TODO - some algo to find closest round size
-    snprintf(rangeText[0], 8, "%d",cfg.minValue/cfg.div);
-    snprintf(rangeText[1], 8, "%d",cfg.minValue/cfg.div + range/3/cfg.div);
-    snprintf(rangeText[2], 8, "%d",cfg.minValue/cfg.div + range*2/3/cfg.div);
-    snprintf(rangeText[3], 8, "%d",cfg.maxValue/cfg.div);
-    maxRange = 0;
-    for (int i = 1; i < 4; i++) {
-        if (strlen(rangeText[i]) > strlen(rangeText[maxRange])) {
-            maxRange = i;
-        }
-    }
 }
 
 void BaseGauge::init() {
@@ -198,7 +186,7 @@ void BaseGauge::init() {
         y + size/2 - (int)(innerRadius * sin(endRadians)),
         x + size/2 + (int)(outerRadius * cos(endRadians)),
         y + size/2 - (int)(outerRadius * sin(endRadians)),
-        fgColor,
+        cfg.tickColor,
         cfg.maxValue
     );
     if (cfg.lowWarn != cfg.minValue) {
@@ -237,12 +225,12 @@ void BaseGauge::init() {
         tickSpacing = 1000;
     }
     tickCount = (range-2) / tickSpacing;
-    printf("Ticks: %d %d\n", tickCount, tickSpacing);
+    //printf("Ticks: %d %d\n", tickCount, tickSpacing);
     ticks = new Line*[tickCount];
     for (int i = 0; i < tickCount; i++) {
         int val = cfg.minValue + (i+1) * tickSpacing;
         int tickAngle = startAngle + endAngle * (val-cfg.minValue)/range;
-        printf("Tick %d = %d @ %d\n", i, val, tickAngle/64);
+        //printf("Tick %d = %d @ %d\n", i, val, tickAngle/64);
         double tickRadians = M_PI/180.0 * tickAngle/64;
         ticks[i] = MakeLine(
             x + size/2 + (int)(innerRadiusTick * cos(tickRadians)),
@@ -253,10 +241,26 @@ void BaseGauge::init() {
             val
         );
     }
+
+    // Range Text   
+    int corner = cfg.minValue + range*2/3;
+    double tmp = (double)corner/((double)tickSpacing);
+    printf("Reference %d %f %f\n", corner, tmp, nearbyint((double)corner/(double)tickSpacing)*((double)tickSpacing));
+    //printf("Reference %f\n", nearbyint((cfg.minValue/(double)cfg.div + (double)range*2.0/3.0)/(double)tickSpacing)*tickSpacing);
+    snprintf(rangeText[0], 8, "%d",cfg.minValue/cfg.div);
+    snprintf(rangeText[1], 8, "%d",cfg.minValue/cfg.div + range/3/cfg.div);
+    snprintf(rangeText[2], 8, "%d",cfg.minValue/cfg.div + range*2/3/cfg.div);
+    snprintf(rangeText[3], 8, "%d",cfg.maxValue/cfg.div);
+    maxRange = 0;
+    for (int i = 1; i < 4; i++) {
+        if (strlen(rangeText[i]) > strlen(rangeText[maxRange])) {
+            maxRange = i;
+        }
+    }
 }
 
 void BaseGauge::UpdateValue(int value) {
-    printf("%s new value %d\n", cfg.label, value);
+    //printf("%s new value %d\n", cfg.label, value);
     this->value = value;
     if (cfg.div == 10) {
         snprintf(readingText, 64, "%d.%d%c",value/cfg.div,value%10, cfg.unit);
@@ -346,7 +350,7 @@ XGauge::XGauge(GaugeConfiguration cfg) : BaseGauge(cfg){
     XftTextExtents8(dis, valueFont, (const FcChar8*) this->cfg.label, strlen(this->cfg.label), &extents);
     labelWidth = extents.width;
     labelHeight = extents.height;
-    labelX = (x + size/2) - (labelWidth/2);
+    labelX = (x + size/2) - (labelWidth/2) + extents.width/strlen(this->cfg.label)/2;
     labelY = (y + size - width) + (labelHeight/2);
 
     // Determine text range
@@ -364,6 +368,7 @@ XGauge::XGauge(GaugeConfiguration cfg) : BaseGauge(cfg){
 }
 
 void XGauge::Draw() {
+    XSetLineAttributes(dis,gc,1,LineSolid,CapButt,JoinMiter);
     //XSetForeground(dis,gc,fgColor);
     //XSetFont(dis,gc,rangeFont->fid);
     XftDrawStringUtf8(draw,&textColor,rangeFont,rangeOrigin[0][0],rangeOrigin[0][1], (const FcChar8*) rangeText[0], strlen(rangeText[0]));
@@ -399,11 +404,17 @@ void XGauge::Draw() {
 
     // Draw the outline for the gauge
     XSetForeground(dis,gc,cfg.tickColor);
+    XSetLineAttributes(dis,gc,3,LineSolid,CapButt,JoinMiter);
     XDrawArc(dis,win,gc,x,y,size,size,startAngle,endAngle);
     XDrawArc(dis,win,gc,innerX,innerY,innerSize,innerSize,startAngle,endAngle);
 
     // Cap the gauge
     capLine->Draw();
+
+    // Tick marks
+    for (int i = 0; i < tickCount; i++) {
+        ticks[i]->Draw();
+    }
 
     // Warning marks
     if (lowWarnLine) {
@@ -411,11 +422,6 @@ void XGauge::Draw() {
     } 
     if (highWarnLine) {
         highWarnLine->Draw();
-    }
-
-    // Tick marks
-    for (int i = 0; i < tickCount; i++) {
-        ticks[i]->Draw();
     }
 
     //XSetForeground(dis,gc,bgColor);
