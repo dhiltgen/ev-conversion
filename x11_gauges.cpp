@@ -147,7 +147,7 @@ void XGauge::Draw() {
 
     XFillArc(dis,win,gc,x,y,size,size,0,360*64);
     XSetForeground(dis,gc,bgColor);
-    XFillArc(dis,win,gc,innerX,innerY,innerSize,innerSize,0,360*64);
+    XFillArc(dis,win,gc,x+thickness,y+thickness,size - (2*thickness),size - (2*thickness),0,360*64);
     points p = currentReadingMask.p;
     XPoint pts[8];
     for (short int i=0; i < p.len; i++) {
@@ -160,7 +160,7 @@ void XGauge::Draw() {
     XSetForeground(dis,gc,cfg.tickColor);
     XSetLineAttributes(dis,gc,3,LineSolid,CapButt,JoinMiter);
     XDrawArc(dis,win,gc,x,y,size,size,0,360*64);
-    XDrawArc(dis,win,gc,innerX,innerY,innerSize,innerSize,0,360*64);
+    XDrawArc(dis,win,gc,x+thickness,y+thickness,size - (2*thickness),size - (2*thickness),0,360*64);
 
     // Clear the bottom of the gauge
     pts[0].x = cfg.x+cfg.size/2;
@@ -172,9 +172,6 @@ void XGauge::Draw() {
     XSetForeground(dis,gc,bgColor);
     XFillPolygon(dis,win,gc,pts,3,Convex,CoordModeOrigin);
 
-
-    //XSetForeground(dis,gc,fgColor);
-    //XSetFont(dis,gc,rangeFont->fid);
     XftDrawStringUtf8(draw,&textColor,rangeFont,rangeOrigin[0][0],rangeOrigin[0][1], (const FcChar8*) rangeText[0], strlen(rangeText[0]));
     XftDrawStringUtf8(draw,&textColor,rangeFont,rangeOrigin[1][0],rangeOrigin[1][1], (const FcChar8*) rangeText[1], strlen(rangeText[1]));
     XftDrawStringUtf8(draw,&textColor,rangeFont,rangeOrigin[2][0],rangeOrigin[2][1], (const FcChar8*) rangeText[2], strlen(rangeText[2]));
@@ -187,25 +184,8 @@ void XGauge::Draw() {
     //XDrawRectangle(dis,win,gc,labelX,labelY-labelHeight,labelWidth,labelHeight);
 
     // Clear out any prior readings
-    // TODO - may not be necessary if the display lib is double buffered
-    // XSetForeground(dis,gc,bgColor);
-    // XFillArc(dis,win,gc,x,y,size,size,startAngle,endAngle);
     XSetForeground(dis,gc,bgColor);
     XFillRectangle(dis,win,gc,readingX,readingY-readingHeight,readingWidth,readingHeight);
-
-
-    // Draw current reading
-    // if (currentValue < cfg.lowWarn && cfg.lowWarn != cfg.minValue) {
-    //     XSetForeground(dis,gc,cfg.lowWarnColor);
-    // } else if (currentValue > cfg.highWarn && cfg.highWarn != cfg.maxValue) {
-    //     XSetForeground(dis,gc,cfg.highWarnColor);
-    // } else {
-    //     XSetForeground(dis,gc,fgColor);
-    // }
-    // XFillArc(dis,win,gc,x,y,size,size,startAngle,currentValueAngle);
-    // XSetForeground(dis,gc,bgColor);
-    // XFillArc(dis,win,gc,innerX,innerY,innerSize,innerSize,startAngle,currentValueAngle);
-
 
 
     // Cap the gauge
@@ -224,15 +204,8 @@ void XGauge::Draw() {
         highWarnLine->Draw();
     }
 
-    //XSetForeground(dis,gc,bgColor);
-    //XFillArc(dis,win,gc,innerX,innerY,innerSize,innerSize,lowWarnAngle,64);
-    //XFillArc(dis,win,gc,innerX,innerY,innerSize,innerSize,highWarnAngle,64);
-
     // Place text currentValue in the center
-    //XSetForeground(dis,gc,fgColor);
-    //XSetFont(dis,gc,valueFont->fid);
     XftDrawStringUtf8(draw,&textColor,valueFont,readingX,readingY, (const FcChar8*) readingText, strlen(readingText));
-    //XSetFont(dis,gc,labelFont->fid);
     XftDrawStringUtf8(draw,&textColor,labelFont,labelX,labelY, (const FcChar8*) cfg.label, strlen(cfg.label));
 
     XFlush(dis);
@@ -240,7 +213,7 @@ void XGauge::Draw() {
 
 
 void init_x() {
-        //printf("Starting\n");
+    //printf("Starting\n");
 
 	dis=XOpenDisplay((char *)0);
    	screen=DefaultScreen(dis);

@@ -51,70 +51,31 @@ BaseGauge::BaseGauge(GaugeConfiguration cfg) {
     x = cfg.x + this->pad;
     y = cfg.y + this->pad;
     size = cfg.size - (2*pad);
-    innerX = x + this->thickness;
-    innerY = y + this->thickness;
-    innerSize = size - (2*thickness);
     innerRadius = size/2-thickness;
     outerRadius = size/2;
-    innerRadiusWarn = size/2-thickness;
-    outerRadiusWarn = size/2;
     innerRadiusTick = size/2-thickness/3;
     outerRadiusTick = size/2;
 
     this->range = cfg.maxValue - cfg.minValue;
-
-    // Warnings to angle mappings
-    lowWarnAngle = startAngle + endAngle * (cfg.lowWarn-cfg.minValue) / range;
-    highWarnAngle = startAngle + endAngle * (cfg.highWarn-cfg.minValue) / range;
 
     targetValueFontHeight = getFontTarget(thickness * 1.2);
     targetLabelFontHeight = getFontTarget(thickness * 0.8);
     targetRangeFontHeight = getFontTarget(thickness * 0.8);
 
     // Calculate Masks
-    endRadians = M_PI/180.0 * (startAngle+endAngle)/64;
     if (cfg.lowWarn != cfg.minValue) {
-        lowWarnRadians = M_PI/180.0 * lowWarnAngle/64;
+        lowWarnRadians = startRadians+(endRadians-startRadians)*(float)(cfg.lowWarn-cfg.minValue)/range;
+
+        printf("%f %f\n", startRadians - endRadians, (float)(cfg.lowWarn-cfg.minValue)/range);
     }
     if (cfg.highWarn != cfg.maxValue) {
-        highWarnRadians = M_PI/180.0 * highWarnAngle/64;
+        highWarnRadians = startRadians+(endRadians-startRadians)*(float)(cfg.highWarn-cfg.minValue)/range;
     }
-    //printf("Start Radians: %f -- end radians: %f\n", startRadians, endRadians);
-    // endMask = mask(endRadians, true);
-    // startMask = mask(startRadians, false);
-    // triangle t = startMask.getMask();
-
-
 }
 
 ValueMask BaseGauge::getValueMask(float radians) {
     ValueMask m = ValueMask();
     m.radians = radians;
-
-    // TODO delete these notes...
-    // return ValueMask(
-    //     x + size/2 + (short int)((outerRadius+pad) * cos(radians)),
-    //     y + size/2 - (short int)((outerRadius+pad) * sin(radians)),
-    //     radians,
-    //     x - pad,
-    //     y - pad,
-    //     size + pad*2,
-    //     cw
-    // );
-    // this->x=x;
-    // this->y=y;
-    // this->radians=radians;
-    // this->originX=originX;
-    // this->originY=originY;
-    // this->size=size;
-    // this->cw=cw;
-    //printf("%d,%d @ %f\n", x, y, radians);
-    // t = triangle{
-    //     x1: originX+size/2,
-    //     y1: originY+size/2,
-    //     x2: x,
-    //     y2: y
-    // };
 
     // First mask point set to center
     m.p.x[0] = cfg.x + cfg.size/2;
@@ -154,11 +115,6 @@ ValueMask BaseGauge::getValueMask(float radians) {
     return m;
 }
 
-// triangle ValueMask::getMask() {
-//     printf("Mask: radians: %f --  %d,%d:%d,%d:%d,%d\n", radians, t.x1,t.y1,t.x2,t.y2,t.x3,t.y3);
-//     return t;
-// }
-
 void BaseGauge::init() {
     // Precalculate the cartesian cords for the various overlay lines
     // to save on cpu cycles when updating
@@ -172,20 +128,20 @@ void BaseGauge::init() {
     );
     if (cfg.lowWarn != cfg.minValue) {
         lowWarnLine = MakeLine(
-            x + size/2 + (short int)(innerRadiusWarn * cos(lowWarnRadians)),
-            y + size/2 - (short int)(innerRadiusWarn * sin(lowWarnRadians)),
-            x + size/2 + (short int)(outerRadiusWarn * cos(lowWarnRadians)),
-            y + size/2 - (short int)(outerRadiusWarn * sin(lowWarnRadians)),
+            x + size/2 + (short int)(innerRadius * cos(lowWarnRadians)),
+            y + size/2 - (short int)(innerRadius * sin(lowWarnRadians)),
+            x + size/2 + (short int)(outerRadius * cos(lowWarnRadians)),
+            y + size/2 - (short int)(outerRadius * sin(lowWarnRadians)),
             cfg.lowWarnColor,
             cfg.lowWarn
         );
     }
     if (cfg.highWarn != cfg.maxValue) {
         highWarnLine = MakeLine(
-            x + size/2 + (short int)(innerRadiusWarn * cos(highWarnRadians)),
-            y + size/2 - (short int)(innerRadiusWarn * sin(highWarnRadians)),
-            x + size/2 + (short int)(outerRadiusWarn * cos(highWarnRadians)),
-            y + size/2 - (short int)(outerRadiusWarn * sin(highWarnRadians)),
+            x + size/2 + (short int)(innerRadius * cos(highWarnRadians)),
+            y + size/2 - (short int)(innerRadius * sin(highWarnRadians)),
+            x + size/2 + (short int)(outerRadius * cos(highWarnRadians)),
+            y + size/2 - (short int)(outerRadius * sin(highWarnRadians)),
             cfg.highWarnColor,
             cfg.highWarn
         );
@@ -208,9 +164,7 @@ void BaseGauge::init() {
     ticks = new Line*[tickCount];
     for (short int i = 0; i < tickCount; i++) {
         short int val = cfg.minValue + (i+1) * tickSpacing;
-        short int tickAngle = startAngle + endAngle * (val-cfg.minValue)/range;
-        //printf("Tick %d = %d @ %d\n", i, val, tickAngle/64);
-        float tickRadians = M_PI/180.0 * tickAngle/64;
+        float tickRadians = startRadians+(endRadians-startRadians)*(float)(val-cfg.minValue)/range;
         ticks[i] = MakeLine(
             x + size/2 + (short int)(innerRadiusTick * cos(tickRadians)),
             y + size/2 - (short int)(innerRadiusTick * sin(tickRadians)),
@@ -222,7 +176,6 @@ void BaseGauge::init() {
     }
 
     // Range Text   
-    //double tmp = (double)corner/((double)tickSpacing);
     snprintf(rangeText[0], 8, "%d",cfg.minValue/cfg.div);
     snprintf(rangeText[1], 8, "%d",(short int)(nearbyint((float)(cfg.minValue + range/3)/(float)tickSpacing)*((float)tickSpacing))/cfg.div);
     snprintf(rangeText[2], 8, "%d",(short int)(nearbyint((float)(cfg.minValue + range*2/3)/(float)tickSpacing)*((float)tickSpacing))/cfg.div);
@@ -244,19 +197,6 @@ void BaseGauge::UpdateValue(short int value) {
         snprintf(readingText, 64, "%d%c",currentValue/cfg.div, cfg.unit);
     }
     // Determine angle of current reading relative to start
-    currentValueAngle = 32; // Render at least 1/2 degree
-    if (currentValue > cfg.maxValue) {
-        currentValueAngle = endAngle;
-    } else if (currentValue > cfg.minValue) {
-        currentValueAngle = endAngle * (currentValue-cfg.minValue)/range;
-    }
-    // TODO this can be simplified once the angle usage is cleaned up
-    short int tmp = startAngle + endAngle * (value-cfg.minValue)/range;
-    currentReadingRadians = M_PI/180.0 * tmp/64;
-
+    currentReadingRadians = startRadians+(endRadians-startRadians)*(float)(value-cfg.minValue)/range;
     currentReadingMask = getValueMask(currentReadingRadians);
-    //printf("Reading Radians: %f\n", currentReadingRadians);
-    // TODO - more to do here
-    //printf("Current Reading Mask: %f\n", floorf(currentReadingRadians/(M_PI/4.0)));
-
 }

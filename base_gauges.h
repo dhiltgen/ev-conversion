@@ -102,19 +102,6 @@ protected:
     float lowWarnRadians;
     float highWarnRadians;
 
-
-    // TODO - these go away once fully cleaned up to use circles and overlaying
-    short int startAngle = 225*64; // TODO - fixup the X11 specific code to do the *64 math
-    short int endAngle = -270*64; 
-    short int innerX;
-    short int innerY;
-    unsigned short int innerSize;
-    short int innerRadiusWarn;
-    short int outerRadiusWarn;
-    short int lowWarnAngle;
-    short int highWarnAngle;
-    short int currentValueAngle;
-
     Line *capLine;
     Line *lowWarnLine;
     Line *highWarnLine;
