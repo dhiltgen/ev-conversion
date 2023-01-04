@@ -10,7 +10,7 @@ Line::Line(
         short int y1,
         short int x2,
         short int y2,
-        unsigned long color,
+        unsigned int color,
         short int currentValue){
     this->x1 = x1;
     this->y1 = y1;
@@ -199,4 +199,127 @@ void BaseGauge::UpdateValue(short int value) {
     // Determine angle of current reading relative to start
     currentReadingRadians = startRadians+(endRadians-startRadians)*(float)(value-cfg.minValue)/range;
     currentReadingMask = getValueMask(currentReadingRadians);
+}
+
+GaugeConfiguration* BaseGauge::GetFullConfiguration(int *len) {
+    GaugeConfiguration *cfgs = new GaugeConfiguration[8];
+    int i = 0;
+    cfgs[i++] = GaugeConfiguration{
+            x:0,
+            y:0,
+            size:170,
+            minValue:10,
+            maxValue:100,
+            lowWarn:20,
+            highWarn:70,
+            lowWarnColor:BLUE,
+            highWarnColor:RED,
+            tickColor:DARK_GREY,
+            unit:'c',
+            label: "temp",
+        };
+
+    cfgs[i++] = GaugeConfiguration{
+            x:190,
+            y:0,
+            size:170,
+            minValue:0,
+            maxValue:100,
+            lowWarn:10,
+            highWarn:95,
+            lowWarnColor:RED,
+            highWarnColor:YELLOW,
+            tickColor:DARK_GREY,
+            unit:'%',
+            label: "SOC",
+        };
+
+    cfgs[i++] = GaugeConfiguration{
+            x:0,
+            y:170,
+            size:170,
+            minValue:0,
+            maxValue:100,
+            lowWarn:20,
+            highWarn:60,
+            lowWarnColor:BLUE,
+            highWarnColor:RED,
+            tickColor:DARK_GREY,
+            unit:'c',
+            label: "motor",
+        };
+    cfgs[i++] = GaugeConfiguration{
+            x:190,
+            y:170,
+            size:170,
+            minValue:0,
+            maxValue:100,
+            lowWarn:20,
+            highWarn:60,
+            lowWarnColor:BLUE,
+            highWarnColor:RED,
+            tickColor:DARK_GREY,
+            unit:'c',
+            label: "inverter",
+        };
+
+    cfgs[i++] = GaugeConfiguration{
+            x:0,
+            y:340,
+            size:145,
+            minValue:0,
+            maxValue:1000,
+            lowWarn:0,
+            highWarn:800,
+            lowWarnColor:YELLOW,
+            highWarnColor:RED,
+            tickColor:DARK_GREY,
+            unit:'w',
+            label: "DC Watts",
+        };
+    cfgs[i++] = GaugeConfiguration{
+            x:160,
+            y:340,
+            size:145,
+            minValue:0,
+            maxValue:100,
+            lowWarn:0,
+            highWarn:80,
+            lowWarnColor:YELLOW,
+            highWarnColor:RED,
+            tickColor:DARK_GREY,
+            unit:'a',
+            label: "DC Amps",
+        };
+    cfgs[i++] = GaugeConfiguration{
+            x:320,
+            y:340,
+            size:145,
+            div:10,
+            minValue:90,
+            maxValue:160,
+            lowWarn:100,
+            highWarn:150,
+            lowWarnColor:YELLOW,
+            highWarnColor:RED,
+            tickColor:DARK_GREY,
+            unit:'v',
+            label: "12v",
+        };
+    cfgs[i++] = GaugeConfiguration{
+            x:410,
+            y:0,
+            size:340,
+            minValue:0,
+            maxValue:100,
+            lowWarn:0,
+            highWarn:100,
+            lowWarnColor:YELLOW,
+            highWarnColor:YELLOW,
+            tickColor:DARK_GREY,
+            unit:'\0',
+            label: "MPH",
+        };
+    *len = i;
+    return cfgs;
 }

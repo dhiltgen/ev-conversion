@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <cstdio>
 #include <math.h>
+#include <map>
 #include "base_gauges.h"
 
 
@@ -19,7 +20,25 @@ int screen;
 Window win;
 GC gc;
 unsigned long fgColor,bgColor;
-XColor yellow,red, blue, grey, darkGrey;
+// XColor yellow,red, blue, grey, darkGrey;
+
+std::map<unsigned int, XColor> colorMap;
+unsigned long convertColor(unsigned int color) {
+    // printf("Convert Color called %06X ", color);
+    XColor c;
+    if (colorMap.find(color) == colorMap.end()) {
+        char tmp[8];
+        snprintf(tmp, 8, "#%06X", color);
+        XParseColor(dis, DefaultColormap(dis,screen), tmp, &c);
+        XAllocColor(dis, DefaultColormap(dis,screen),&c);
+        colorMap[color] = c;
+        // printf("Storing color - pixel %lx\n", c.pixel);
+    } else {
+        c = colorMap[color];
+        // printf("exists - pixel %lx\n", c.pixel);
+    }
+    return c.pixel;
+}
 
 
 class XLine: public Line {
@@ -35,7 +54,7 @@ public:
 };
 
 void XLine::Draw() {
-    XSetForeground(dis,gc,color);
+    XSetForeground(dis,gc,convertColor(color));
     XDrawLine(dis, win, gc, x1,y1,x2,y2);
 }
 
@@ -57,7 +76,7 @@ public:
         short int y1,
         short int x2,
         short int y2,
-        unsigned long color,
+        unsigned int color,
         short int currentValue) {return new XLine(x1,y1,x2,y2,color,currentValue);}
 
 protected:
@@ -128,13 +147,13 @@ XGauge::XGauge(GaugeConfiguration cfg) : BaseGauge(cfg){
 }
 
 void XGauge::Draw() {
-    XSetLineAttributes(dis,gc,1,LineSolid,CapButt,JoinMiter);
+    // XSetLineAttributes(dis,gc,1,LineSolid,CapButt,JoinMiter);
 
     // Draw current reading
     if (currentValue < cfg.lowWarn && cfg.lowWarn != cfg.minValue) {
-        XSetForeground(dis,gc,cfg.lowWarnColor);
+        XSetForeground(dis,gc,convertColor(cfg.lowWarnColor));
     } else if (currentValue > cfg.highWarn && cfg.highWarn != cfg.maxValue) {
-        XSetForeground(dis,gc,cfg.highWarnColor);
+        XSetForeground(dis,gc,convertColor(cfg.highWarnColor));
     } else {
         XSetForeground(dis,gc,fgColor);
     }
@@ -157,8 +176,8 @@ void XGauge::Draw() {
     XFillPolygon(dis,win,gc,pts,p.len,Complex,CoordModeOrigin);
 
     // Draw the outline for the gauge
-    XSetForeground(dis,gc,cfg.tickColor);
-    XSetLineAttributes(dis,gc,3,LineSolid,CapButt,JoinMiter);
+    XSetForeground(dis,gc,convertColor(cfg.tickColor));
+    // XSetLineAttributes(dis,gc,3,LineSolid,CapButt,JoinMiter);
     XDrawArc(dis,win,gc,x,y,size,size,0,360*64);
     XDrawArc(dis,win,gc,x+thickness,y+thickness,size - (2*thickness),size - (2*thickness),0,360*64);
 
@@ -211,34 +230,30 @@ void XGauge::Draw() {
     XFlush(dis);
 }
 
-
 void init_x() {
     //printf("Starting\n");
 
 	dis=XOpenDisplay((char *)0);
    	screen=DefaultScreen(dis);
-	bgColor=BlackPixel(dis,screen),
-        XParseColor(dis, DefaultColormap(dis,screen), "grey", &grey);
-        XAllocColor(dis, DefaultColormap(dis,screen),&grey);
-	fgColor=grey.pixel;
-   	win=XCreateSimpleWindow(dis,DefaultRootWindow(dis),0,0,	
-		800, 480, 5,fgColor, bgColor);
+	bgColor=convertColor(BLACK);
+    fgColor=convertColor(GREY);
+   	win=XCreateSimpleWindow(dis,DefaultRootWindow(dis),0,0,	800, 480, 5,fgColor, bgColor);
 	XSetStandardProperties(dis,win,"Howdy","Hi",None,NULL,0,NULL);
 	XSelectInput(dis, win, ExposureMask|ButtonPressMask);
-        gc=XCreateGC(dis, win, 0,0);        
+    gc=XCreateGC(dis, win, 0,0);        
 	XSetBackground(dis,gc,bgColor);
 	XSetForeground(dis,gc,fgColor);
 	XClearWindow(dis, win);
 	XMapRaised(dis, win);
-        XParseColor(dis, DefaultColormap(dis,screen), "gold", &yellow);
-        XAllocColor(dis, DefaultColormap(dis,screen),&yellow);
-        XParseColor(dis, DefaultColormap(dis,screen), "crimson", &red);
-        XAllocColor(dis, DefaultColormap(dis,screen),&red);
-        XParseColor(dis, DefaultColormap(dis,screen), "royal blue", &blue);
-        XAllocColor(dis, DefaultColormap(dis,screen),&blue);
-        XParseColor(dis, DefaultColormap(dis,screen), "dim grey", &darkGrey);
-        XAllocColor(dis, DefaultColormap(dis,screen),&darkGrey);
-        //printf("finished\n");
+    // XParseColor(dis, DefaultColormap(dis,screen), "gold", &yellow);
+    // XAllocColor(dis, DefaultColormap(dis,screen),&yellow);
+    // XParseColor(dis, DefaultColormap(dis,screen), "crimson", &red);
+    // XAllocColor(dis, DefaultColormap(dis,screen),&red);
+    // XParseColor(dis, DefaultColormap(dis,screen), "royal blue", &blue);
+    // XAllocColor(dis, DefaultColormap(dis,screen),&blue);
+    // XParseColor(dis, DefaultColormap(dis,screen), "dim grey", &darkGrey);
+    // XAllocColor(dis, DefaultColormap(dis,screen),&darkGrey);
+    printf("finished\n");
 };
 
 void close_x() {
@@ -265,135 +280,15 @@ int main() {
 	char text[255];		/* a char buffer for KeyPress Events */
         init_x();
 
+    // TODO refactor this to be common for both types of UIs
 	XClearWindow(dis, win);
-        XGauge battTemp = XGauge(GaugeConfiguration{
-            x:0,
-            y:0,
-            size:170,
-            minValue:10,
-            maxValue:100,
-            lowWarn:20,
-            highWarn:70,
-            lowWarnColor:blue.pixel,
-            highWarnColor:red.pixel,
-            tickColor:darkGrey.pixel,
-            unit:'c',
-            label: "temp",
-        });
-
-        XGauge soc = XGauge(GaugeConfiguration{
-            x:190,
-            y:0,
-            size:170,
-            minValue:0,
-            maxValue:100,
-            lowWarn:10,
-            highWarn:95,
-            lowWarnColor:red.pixel,
-            highWarnColor:yellow.pixel,
-            tickColor:darkGrey.pixel,
-            unit:'%',
-            label: "SOC",
-        });
-
-        XGauge motor = XGauge(GaugeConfiguration{
-            x:0,
-            y:170,
-            size:170,
-            minValue:0,
-            maxValue:100,
-            lowWarn:20,
-            highWarn:60,
-            lowWarnColor:blue.pixel,
-            highWarnColor:red.pixel,
-            tickColor:darkGrey.pixel,
-            unit:'c',
-            label: "motor",
-        });
-        XGauge inverter = XGauge(GaugeConfiguration{
-            x:190,
-            y:170,
-            size:170,
-            minValue:0,
-            maxValue:100,
-            lowWarn:20,
-            highWarn:60,
-            lowWarnColor:blue.pixel,
-            highWarnColor:red.pixel,
-            tickColor:darkGrey.pixel,
-            unit:'c',
-            label: "inverter",
-        });
-
-        XGauge dcwatts = XGauge(GaugeConfiguration{
-            x:0,
-            y:340,
-            size:145,
-            minValue:0,
-            maxValue:1000,
-            lowWarn:0,
-            highWarn:800,
-            lowWarnColor:yellow.pixel,
-            highWarnColor:red.pixel,
-            tickColor:darkGrey.pixel,
-            unit:'w',
-            label: "DC Watts",
-        });
-        XGauge dcamps = XGauge(GaugeConfiguration{
-            x:160,
-            y:340,
-            size:145,
-            minValue:0,
-            maxValue:100,
-            lowWarn:0,
-            highWarn:80,
-            lowWarnColor:yellow.pixel,
-            highWarnColor:red.pixel,
-            tickColor:darkGrey.pixel,
-            unit:'a',
-            label: "DC Amps",
-        });
-        XGauge lowvolts = XGauge(GaugeConfiguration{
-            x:320,
-            y:340,
-            size:145,
-            div:10,
-            minValue:90,
-            maxValue:160,
-            lowWarn:100,
-            highWarn:150,
-            lowWarnColor:yellow.pixel,
-            highWarnColor:red.pixel,
-            tickColor:darkGrey.pixel,
-            unit:'v',
-            label: "12v",
-        });
-        XGauge speed = XGauge(GaugeConfiguration{
-            x:410,
-            y:0,
-            size:340,
-            minValue:0,
-            maxValue:100,
-            lowWarn:0,
-            highWarn:100,
-            lowWarnColor:yellow.pixel,
-            highWarnColor:yellow.pixel,
-            tickColor:darkGrey.pixel,
-            unit:'\0',
-            label: "MPH",
-        });
-
-        XGauge *gauges[] = {
-            &battTemp,
-            &soc,
-            &motor,
-            &inverter,
-            &dcwatts,
-            &dcamps,
-            &lowvolts,
-            &speed,
-        };
-
+    int len;
+    GaugeConfiguration *cfgs = BaseGauge::GetFullConfiguration(&len);
+    printf("Got %d cfgs\n", len);
+    XGauge *gauges[len];
+    for (int i = 0; i < len; i++) {
+        gauges[i] = new XGauge(cfgs[i]);
+    }
 
 	/* look for events forever... */
 	while(1) {		

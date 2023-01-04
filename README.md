@@ -322,6 +322,9 @@ Charger: hidden when driving
 * Ac voltage
 * Evse status
 
+![Gauge Mockup](./images/gauge_mock.png)
+
+
 # Misc Parts
 
 GM Volt Battery Heater: 20996973 / 506305

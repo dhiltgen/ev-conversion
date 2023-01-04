@@ -1,3 +1,11 @@
+#define	BLACK       0x000000
+#define GREY        0xBEBEBE
+#define DARK_GREY   0x696969
+#define	BLUE        0x0000FF
+#define	RED         0xDC143C
+#define YELLOW      0xFFD700
+#define WHITE       0xFFFFFF
+
 typedef struct {
     short int x;
     short int y;
@@ -11,9 +19,9 @@ typedef struct {
     short int highWarn;
 
     // TODO refactor warnings to be a list, possibly with callback function when crossed
-    unsigned long lowWarnColor;
-    unsigned long highWarnColor;
-    unsigned long tickColor;
+    unsigned int lowWarnColor;
+    unsigned int highWarnColor;
+    unsigned int tickColor;
 
     // Unit character for numeric display
     char unit;
@@ -27,14 +35,14 @@ public:
     short int y1;
     short int x2;
     short int y2;
-    unsigned long color;
+    unsigned int color;
     short int currentValue;
     Line(
         short int x1,
         short int y1,
         short int x2,
         short int y2,
-        unsigned long color,
+        unsigned int color,
         short int currentValue);
 
     virtual void Draw() = 0;
@@ -64,9 +72,11 @@ public:
         short int y1,
         short int x2,
         short int y2,
-        unsigned long color,
+        unsigned int color,
         short int currentValue) = 0;
     GaugeConfiguration cfg; // TODO - should be protected
+
+    static GaugeConfiguration* GetFullConfiguration(int *len);
 
 protected:
     void init(); // Wrap up initialization, calls virtual functions in derived classes
